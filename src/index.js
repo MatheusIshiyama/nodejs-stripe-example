@@ -1,8 +1,10 @@
 const express = require('express');
 const cors = require('cors');
 require('./config/dotenv');
+require('./database');
 
 const { webhookRoutes } = require('./routes/webhookRoutes');
+const { paymentRoutes } = require('./routes/paymentRoutes');
 
 class App {
   constructor() {
@@ -20,8 +22,8 @@ class App {
   configApp() {
     this.app.use(
       express.json({
-        verify: (req, res, buffer) => {
-          req['rawBody'] = buffer.toString(); // Store raw body in request for later use
+        verify: (req, res, buf) => {
+          if (req.originalUrl.startsWith('/webhook')) req.rawBody = buf.toString();
         },
       })
     );
@@ -31,6 +33,7 @@ class App {
 
   configRoutes() {
     webhookRoutes(this.app);
+    paymentRoutes(this.app);
   }
 
   start() {

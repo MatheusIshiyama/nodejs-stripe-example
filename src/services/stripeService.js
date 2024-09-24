@@ -1,31 +1,11 @@
 const Stripe = require('stripe');
+const StripeEvents = require('../events/stripeEvents');
 
 const stripe = Stripe(process.env.STRIPE_KEY);
-const eventListener = new Map();
 
-const handleEvent = (event) => {
-  const eventListenerExists = eventListener.has(event.type);
-
-  if (!eventListenerExists) return console.log(`${event.type} is not listed in event listener`);
-
-  const eventFunction = eventListener.get(event.type);
-
-  return eventFunction(event);
-};
+const stripeEvents = new StripeEvents();
 
 class StripeService {
-  constructor() {
-    this.setup();
-  }
-
-  setup() {
-    this.setEvents();
-  }
-
-  setEvents() {
-    eventListener.set('payment_intent.succeeded', this.paymentIntentSucceeded);
-  }
-
   handleWebhook(req, res) {
     const sig = req.headers['stripe-signature'];
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -35,7 +15,7 @@ class StripeService {
       const event = stripe.webhooks.constructEvent(req['rawBody'], sig, endpointSecret);
 
       // Handle the event (e.g., payment success, refund, etc.)
-      handleEvent(event);
+      stripeEvents.handleEvent(event);
 
       res.json({ received: true });
     } catch (err) {
@@ -44,9 +24,34 @@ class StripeService {
     }
   }
 
-  paymentIntentSucceeded(event) {
-    const paymentIntent = event.data.object;
-    console.log('PaymentIntent was successful!', paymentIntent);
+  async createCheckoutSession(purchase) {
+    const { id, productName, price, currency } = purchase;
+
+    try {
+      const session = await stripe.checkout.sessions.create({
+        client_reference_id: id,
+        mode: 'payment',
+        customer_email: 'test@test.com',
+        line_items: [
+          {
+            price_data: {
+              currency,
+              unit_amount: price,
+              product_data: {
+                name: productName,
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        success_url: 'http://localhost:3000/payment/callback',
+      });
+
+      return session;
+    } catch (error) {
+      console.log('Create session error.', { error });
+      throw error;
+    }
   }
 }
 
